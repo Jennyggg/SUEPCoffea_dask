@@ -162,10 +162,13 @@ def plot(df, output, abcd, label_out, sys):
 #############################################################################################################
 
 # get list of files
-'''
+
 username = getpass.getuser()
 if options.xrootd:
     dataDir = "/scratch/{}/SUEP/{}/{}/".format(username,options.tag,options.dataset)
+    if username in ["jinw"]:
+        dataDir = "/pnfs/psi.ch/cms/trivcat/store/user/{}/SUEP/{}/{}/".format(username,options.tag,options.dataset)
+        redirector = "root://t3dcachedb.psi.ch:1094/"
     if options.merged: dataDir += "merged/"
     result = subprocess.check_output(["xrdfs",redirector,"ls",dataDir])
     result = result.decode("utf-8")
@@ -175,7 +178,7 @@ else:
     dataDir = "/data/submit/{}/{}/{}/".format(username, options.tag, options.dataset)
     if options.merged: dataDir += "merged/"
     files = [dataDir + f for f in os.listdir(dataDir)]
-'''
+
 # get cross section
 xsection = 1.0
 if options.isMC: xsection = getXSection(options.dataset, options.era)
@@ -184,7 +187,7 @@ if options.isMC: xsection = getXSection(options.dataset, options.era)
 
 
 puweights, puweights_up, puweights_down = pileup_weight.pileup_weight(options.era)   
-trig_bins, trig_weights, trig_weights_up, trig_weights_down = triggerSF.triggerSF(options.era)
+#trig_bins, trig_weights, trig_weights_up, trig_weights_down = triggerSF.triggerSF(options.era)
 
 # custom per region weights
 scaling_weights = None
@@ -308,11 +311,12 @@ if options.isMC and not options.scouting:
             new_config[label_out_new]['SR'][iSel][0] += "_trackDOWN"
         for iSel in range(len(new_config[label_out_new]['selections'])):
             new_config[label_out_new]['selections'][iSel][0] += "_trackDOWN"
-    config = new_config | config
+    #config = new_config | config
+    config = dict(list(new_config.items())+list(config.items()))
     
 ### Plotting loop #######################################################################
 #files = ["filenames.hdf5"] #for running locally add file name here
-files = ["../out_sig_addPS.hdf5"]
+#files = ["../out_sig_addPS.hdf5"]
 for ifile in tqdm(files):
     
     #####################################################################################
@@ -348,8 +352,8 @@ for ifile in tqdm(files):
     # ---- Make plots
     #####################################################################################
     event_weight = np.ones(df.shape[0])
-    sys_loop = ["","puweights_up","puweights_down","trigSF_up","trigSF_down","PSWeight_ISR_up","PSWeight_ISR_down","PSWeight_FSR_up","PSWeight_FSR_down"]
-#    sys_loop = ["","puweights_up","puweights_down","PSWeight_ISR_up","PSWeight_ISR_down","PSWeight_FSR_up","PSWeight_FSR_down"]
+ #   sys_loop = ["","puweights_up","puweights_down","trigSF_up","trigSF_down","PSWeight_ISR_up","PSWeight_ISR_down","PSWeight_FSR_up","PSWeight_FSR_down"]
+    sys_loop = ["","puweights_up","puweights_down","PSWeight_ISR_up","PSWeight_ISR_down","PSWeight_FSR_up","PSWeight_FSR_down"]
     for sys in sys_loop:
         # prepare new event weight
         df['event_weight'] = event_weight
@@ -366,7 +370,7 @@ for ifile in tqdm(files):
             df['event_weight'] *= pu
 
         # 2) TriggerSF weights
-        
+        '''
         if options.isMC == 1 and options.scouting != 1:
             ht = np.array(df['ht']).astype(int)
             ht_bin = np.digitize(ht,trig_bins)-1 #digitize the values to bins
@@ -378,7 +382,7 @@ for ifile in tqdm(files):
             else:
                  trigSF = trig_weights[ht_bin]
             df['event_weight'] *= trigSF   
-        
+        '''
         # 3) PS weights
         if options.isMC == 1 and options.scouting != 1 and ("PSWeight" in sys):
             if sys in df.keys():
@@ -409,8 +413,8 @@ for ifile in tqdm(files):
 
 ### End plotting loop ###################################################################
     
-print(output['SUEP_S1_Cluster'])
-print(output['SUEP_S1_Cluster_trackDOWN'])
+#print(output['SUEP_S1_Cluster'])
+#print(output['SUEP_S1_Cluster_trackDOWN'])
 
 # do the tracks UP systematic
 sys = 'trackUP'
@@ -424,8 +428,8 @@ for label_out, config_out in config.items():
         hNom = output[hist_name.replace('_trackDOWN','')].copy()
         hUp = get_tracks_up(hNom, hDown)
         new_output.update({hist_name.replace('_trackDOWN','_trackUP'): hUp})
-    output = new_output | output
-        
+    #output = new_output | output
+    output = dict(list(new_output.items())+list(output.items()))    
 # apply normalization
 output.pop("labels")
 if options.isMC:
