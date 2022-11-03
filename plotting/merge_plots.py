@@ -6,27 +6,8 @@ import getpass
 import argparse
 from tqdm import tqdm
 
-def h5load(ifile, label):
-    try:
-        with pd.HDFStore(ifile, 'r') as store:
-            try:
-                data = store[label] 
-                metadata = store.get_storer(label).attrs.metadata
-                return data, metadata
-            except KeyError:
-                print("No key",label,ifile)
-                return 0, 0
-    except:
-       print("Some error occurred", ifile)
-       return 0, 0
-# def h5load(ifile, label):
-#     with pd.HDFStore(ifile, 'r') as store:
-        
-#         data = store[label] 
-#         metadata = store.get_storer(label).attrs.metadata
-#         return data, metadata
+from plot_utils import *
 
-    
 parser = argparse.ArgumentParser(description='Famous Submitter')
 parser.add_argument("-dataset", "--dataset"  , type=str, default="QCD", help="dataset name", required=True)
 parser.add_argument("-t"   , "--tag"   , type=str, default="IronMan"  , help="production tag", required=False)
@@ -37,8 +18,8 @@ options = parser.parse_args()
 username = getpass.getuser()
 tag = options.tag
 dataset = options.dataset
-redirector = "root://t3serv017.mit.edu/"
-dataDir = "/scratch/{}/SUEP/{}/{}/".format(username,tag,dataset)
+redirector = "root://submit50.mit.edu/"
+dataDir = "/cms/store/user/{}/SUEP/{}/{}/".format(username,tag,dataset)
 outDir = dataDir + "/merged/"
 
 # create output dir
@@ -73,7 +54,7 @@ def time_limited_move(infile, outfile, time_limit=60, max_attempts=5):
         returncode = -1
         q = multiprocessing.Manager().Queue()
         q.put(returncode)
-        p = multiprocessing.Process(target=move, name="move_"+file, args=(q, infile, outfile))
+        p = multiprocessing.Process(target=move, name="move_"+infile, args=(q, infile, outfile))
         p.start()
         # Wait a maximum of time_limit seconds for foo
         # Usage: join([timeout in seconds])
@@ -123,16 +104,10 @@ for ifile, file in enumerate(tqdm(files)):
     if 'empty' in list(df.keys()): 
         subprocess.run(['rm',dataset+'.hdf5'])    
         continue
-    
-    # debug
-    print("wwhat")
-    
+        
     if df.shape[0] == 0: 
         subprocess.run(['rm',dataset +'.hdf5'])  
         continue
-        
-    # debug
-    print("here")
                 
     ### MERGE DF VARS
     if type(df_tot) == int: df_tot = df

@@ -27,6 +27,7 @@ options = parser.parse_args()
 working_directory = '/work/submit/{}/dummy_directory{}'.format(getpass.getuser(), np.random.randint(0,10000))
 os.system('mkdir {}'.format(working_directory))
 os.system('cp -R ../* {}/.'.format(working_directory))
+print("Working in", working_directory)
 
 def call_process(cmd):
     """ This runs in a separate thread. """
@@ -42,7 +43,7 @@ with open(options.inputList, 'r') as f:
     input_list = [l.split('/')[-1].strip('\n') for l in input_list]
 
 #if you want to limit what you run over modify the following:
-#input_list = [f for f in read_filelist('../filelist/list_2018_MC_A01.txt') if 'SUEP' in f] 
+# input_list = [f for f in read_filelist('../filelist/list_2018_SUEP_A01.txt')] 
 
 results = []
 start = time.time()

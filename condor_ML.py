@@ -19,6 +19,7 @@ parser.add_argument('--isMC', type=int, default=1, help="")
 parser.add_argument('--jobNum', type=int, default=1, help="")
 parser.add_argument('--era', type=str, default="2018", help="")
 parser.add_argument('--doSyst', type=int, default=1, help="")
+parser.add_argument('--doInf', type=int, default=1, help="")
 parser.add_argument('--infile', type=str, default=None, help="")
 parser.add_argument('--dataset', type=str, default="X", help="")
 parser.add_argument('--nevt', type=str, default=-1, help="")
@@ -27,7 +28,7 @@ options = parser.parse_args()
 out_dir = os.getcwd()
 modules_era = []
 
-modules_era.append(SUEP_cluster(isMC=options.isMC, era=int(options.era), scouting=0, do_syst=1,  syst_var='', sample=options.dataset, weight_syst='' , flag=False, do_inf=False, output_location=out_dir))
+modules_era.append(ML_cluster(isMC=options.isMC, era=int(options.era), scouting=0, do_syst=options.doSyst,  syst_var='', sample=options.dataset, weight_syst='' , flag=False, do_inf=False, output_location=out_dir))
 
 for instance in modules_era:
     output = run_uproot_job(
@@ -39,7 +40,8 @@ for instance in modules_era:
                        'schema': processor.NanoAODSchema,
                        'xrootdtimeout': 10,
         },
-        chunksize=10000000,
+        chunksize=1,
     )
     
-merge(options)
+
+merge_ML(options)

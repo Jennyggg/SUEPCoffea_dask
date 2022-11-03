@@ -18,26 +18,40 @@ import pileup_weight
 import triggerSF
 from plot_utils import *
 
+
 parser = argparse.ArgumentParser(description='Famous Submitter')
+# Name of the output file tag
+parser.add_argument("-o"   , "--output"   , type=str, help="output tag", required=True)
+# Where the files are coming from. Either provide: 
+# 1. filepath with -f
+# 2. tag and dataset for something in dataDirLocal.format(tag, dataset)
+# 3. tag, dataset and xrootd = 1 for something in dataDirXRootD.format(tag, dataset)
 parser.add_argument("-dataset", "--dataset"  , type=str, default="QCD", help="dataset name", required=False)
 parser.add_argument("-t"   , "--tag"   , type=str, default="IronMan"  , help="production tag", required=False)
-parser.add_argument("-o"   , "--output"   , type=str, default="IronMan"  , help="output tag", required=False)
-parser.add_argument("-e"   , "--era"   , type=int, default=2018  , help="era", required=False)
-parser.add_argument('--doSyst', type=int, default=0, help="make systematic plots")
-parser.add_argument('--isMC', type=int, default=1, help="Is this MC or data")
+parser.add_argument('-f', '--file', type=str, default='', help="Use specific input file")
+parser.add_argument('--xrootd', type=int, default=0, help="Local data or xrdcp from hadoop (default=False)")
+# optional: call it with --merged = 1 to append a /merged/ to the paths in options 2 and 3
+parser.add_argument('--merged', type=int, default=1, help="Use merged files")
+# some info about the files, highly encouraged to specify everytime
+parser.add_argument("-e"   , "--era"   , type=int, help="era", required=True)
+parser.add_argument('--isMC', type=int, help="Is this MC or data", required=True)
 parser.add_argument('--scouting', type=int, default=0, help="Is this scouting or no")
+# some parameters you can toggle freely
+parser.add_argument('--doSyst', type=int, default=0, help="make systematic plots")
 parser.add_argument('--blind', type=int, default=1, help="Blind the data (default=True)")
 parser.add_argument('--weights', type=str, default="None", help="Pass the filename of the weights, e.g. --weights weights.npy")
-parser.add_argument('--xrootd', type=int, default=0, help="Local data or xrdcp from hadoop (default=False)")
-parser.add_argument('--merged', type=int, default=1, help="Use merged files")
-parser.add_argument('-f', '--file', type=str, default='', help="Use specific input file")
 options = parser.parse_args()
 
-# parameters for script
-output_label = options.output
-#outDir = "/work/submit/{}/SUEP/outputs/".format(getpass.getuser())
-outDir = "/work/"
-redirector = "root://t3serv017.mit.edu/"
+###################################################################################################################
+# Script Parameters
+###################################################################################################################
+
+outDir = "/work/submit/{}/SUEP/outputs/".format(getpass.getuser())
+# define these if --xrootd 0
+dataDirLocal = "/data/submit//cms/store/user/{}/SUEP/{}/{}/".format(getpass.getuser(),options.tag,options.dataset)
+# and these is --xrootd 1
+redirector = "root://submit50.mit.edu/"
+dataDirXRootD = "/cms/store/user/{}/SUEP/{}/{}/".format(getpass.getuser(),options.tag,options.dataset)
 
 """
 Define output plotting methods, each draws from an input_method (outputs of SUEPCoffea),
@@ -55,6 +69,17 @@ config = {
         'yvar' : 'SUEP_nconst_CL',
         'yvar_regions' : [20, 40, 80, 1000],
         'SR' : [['SUEP_S1_CL', '>=', 0.5], ['SUEP_nconst_CL', '>=', 80]],
+        'selections' : [['ht', '>', 1200], ['ntracks','>', 0], ["SUEP_S1_CL", ">=", 0.0]]
+    },
+    
+    'GNN' : {
+        'input_method' : 'GNN',
+        'xvar' :'SUEP_S1_GNN',
+        'xvar_regions' : [0.0, 0.5, 1.0],
+        'yvar' : 'single_l5_bPfcand_S1_GNN',
+        'yvar_regions' : [0.0, 0.5, 1.0],
+        'SR' : [['SUEP_S1_GNN', '>=', 0.5], ['single_l5_bPfcand_S1_GNN', '>=', 0.5]],
+        'SR2': [['SUEP_S1_CL', '>=', 0.5], ['SUEP_nconst_CL', '>=', 80]], # both are blinded
         'selections' : [['ht', '>', 1200], ['ntracks','>', 0], ["SUEP_S1_CL", ">=", 0.0]]
     },
     
@@ -77,19 +102,10 @@ config = {
     #     'SR' : [['SUEP_S1_IRM', '>=', 0.5], ['SUEP_nconst_IRM', '>=', 40]],
     #     'selections' : [['ht', '>', 1200], ['ntracks','>', 0], ["SUEP_S1_IRM", ">=", 0.0]]
     # },
-        
-#     'ResNet' : {
-#         'input_method' : 'ML',
-#         'xvar' : 'resnet_SUEP_pred_ML',
-#         'xvar_regions' : [0.0, 0.5, 1.0],
-#         'yvar' : 'ntracks',
-#         'yvar_regions' : [0, 100, 1000],
-#         'SR' : [['resnet_SUEP_pred_ML', '>=', 0.5], ['ntracks', '>=', 100]],
-#         'selections' : [['ht', '>', 600], ['ntracks','>',0]]
-#     },
     
 }
 
+<<<<<<< HEAD
 #############################################################################################################
             
 def plot(df, output, abcd, label_out, sys):
@@ -252,6 +268,7 @@ def create_output_file(label, abcd, sys):
             output.update({
                 r+"SUEP_nconst_"+label : Hist.new.Reg(199, 0, 500, name=r+"SUEP_nconst_"+label, label="# Tracks in SUEP").Weight(),
                 r+"SUEP_pt_"+label : Hist.new.Reg(100, 0, 2000, name=r+"SUEP_pt_"+label, label=r"SUEP $p_T$ [GeV]").Weight(),
+                r+"SUEP_delta_pt_genPt_"+label : Hist.new.Reg(400, -2000, 2000, name=r+"SUEP_delta_pt_genPt_"+label, label="SUEP $p_T$ - genSUEP $p_T$ [GeV]").Weight(),
                 r+"SUEP_pt_avg_"+label : Hist.new.Reg(200, 0, 500, name=r+"SUEP_pt_avg_"+label, label=r"SUEP Components $p_T$ Avg.").Weight(),
                 r+"SUEP_pt_avg_b_"+label : Hist.new.Reg(50, 0, 50, name=r+"SUEP_pt_avg_b_"+label, label=r"SUEP Components $p_T$ avg (Boosted Frame)").Weight(),
                 r+"SUEP_eta_"+label : Hist.new.Reg(100,-5,5, name=r+"SUEP_eta_"+label, label=r"SUEP $\eta$").Weight(),
@@ -288,46 +305,166 @@ def create_output_file(label, abcd, sys):
                 r+"ISR_rho1_"+label : Hist.new.Reg(100, 0, 20, name=r+"ISR_rho1_"+label, label=r"ISR $\rho_1$").Weight(),
             })
     
-    if label == 'ML':
+    if label == 'GNN':
+        
+        # 2D histograms
+        output.update({
+            "2D_SUEP_S1_vs_single_l5_bPfcand_S1_"+label : Hist.new.Reg(100, 0, 1.0, name="SUEP_S1_"+label, label='$Sph_1$').Reg(100, 0, 1, name="single_l5_bPfcand_S1_"+label, label='GNN Output').Weight(), 
+            "2D_SUEP_nconst_vs_single_l5_bPfcand_S1_"+label : Hist.new.Reg(200, 0, 500, name="SUEP_nconst_"+label, label='# Const').Reg(100, 0, 1, name="single_l5_bPfcand_S1_"+label, label='GNN Output').Weight(), 
+            "2D_SUEP_nconst_vs_SUEP_S1_"+label : Hist.new.Reg(200, 0, 500, name="SUEP_nconst_"+label, label='# Const').Reg(100, 0, 1, name="SUEP_S1_"+label, label='$Sph_1$').Weight(), 
+           })
+        
         for r in regions_list:
             output.update({
-                r+"resnet_pred_"+label : Hist.new.Reg(100, 0, 1, name=r+"resnet_SUEP_pred_"+label, label="Resnet Output").Weight(),
-                r+"ntracks_"+label : Hist.new.Reg(100, 0, 500, name=r+"ntracks"+label, label="# Tracks in Event").Weight(),
+                r+"single_l5_bPfcand_S1_"+label : Hist.new.Reg(100, 0, 1, name=r+"single_l5_bPfcand_S1_"+label, label="GNN Output").Weight(),
+                r+"SUEP_nconst_"+label : Hist.new.Reg(199, 0, 500, name=r+"SUEP_nconst"+label, label="# Tracks in SUEP").Weight(),
+                r+"SUEP_S1_"+label : Hist.new.Reg(100, 0, 1, name=r+"SUEP_S1_"+label, label="$Sph_1$").Weight(),
             })
                         
     return output
 
+#############################################################################################################
+            
+def plotter(df, output, abcd, label_out, sys, blind=True, isMC=False):
+    """
+    INPUTS:
+        df: input file DataFrame.
+        output: dictionary of histograms to be filled.
+        abcd: definitions of ABCD regions, signal region, event selections.
+        label_out: label associated with the output (e.g. "ISRRemoval"), as keys in 
+                   the config dictionary.
+        
+    OUTPUTS: 
+        output: dict, now with updated histograms.
+        
+    EXPLANATION:
+    The DataFrame generated by ../workflows/SUEP_coffea.py has the form:
+    event variables (ht, ...)   CL vars (SUEP_S1_CL, ...)  ML vars  Other Methods
+          0                                 0                   0          ...
+          1                                 NaN                 1          ...
+          2                                 NaN                 NaN        ...
+          3                                 1                   2          ...
+    (The event vars are always filled, while the vars for each method are filled only
+    if the event passes the method's selections, hence the NaNs).
+    
+    This function will plot, for each 'label_out':
+        1. All event variables, e.g. ht_label_out
+        2. All columns from 'input_method', e.g. SUEP_S1_IRM column will be
+           plotted to histogram SUEP_S1_ISRRemoval.
+        3. 2D variables are automatically plotted, as long as hstogram is
+           initialized in the output dict as "2D_var1_vs_var2"
+    
+    N.B.: Histograms are filled only if they are initialized in the output dictionary.
+
+    e.g. We want to plot CL. 
+    Event Selection:
+        1. Grab only events that don't have NaN for CL variables.
+        2. Blind for data! Use SR to define signal regions and cut it out of df.
+        3. Apply selections as defined in the 'selections' in the dict.
+
+    Fill Histograms:
+        1. Plot variables from the DataFrame. 
+           1a. Event wide variables
+           1b. Cluster method (CL) variables
+        2. Plot 2D variables.
+        3. Plot variables from the different ABCD regions as defined in the abcd dict.
+           3a. Event wide variables
+           3b. Cluster method (CL) variables
+    """
+
+    input_method = abcd['input_method']
+    if len(sys) > 0: label_out = label_out + "_" + sys
+    
+    # 1. keep only events that passed this method
+    df = df[~df[abcd['xvar']].isnull()]
+        
+    # 2. blind
+    if blind and not isMC:       
+        SR = abcd['SR']
+        if len(SR) != 2: sys.exit(label_out+": Make sure you have correctly defined your signal region. Exiting.")
+        df = df.loc[~(make_selection(df, SR[0][0], SR[0][1], SR[0][2], apply=False) & make_selection(df, SR[1][0], SR[1][1], SR[1][2], apply=False))]
+        
+        if 'SR2' in abcd.keys():
+            SR2 = abcd['SR2']
+            if len(SR2) != 2: sys.exit(label_out+": Make sure you have correctly defined your signal region. Exiting.")
+            df = df.loc[~(make_selection(df, SR2[0][0], SR2[0][1], SR2[0][2], apply=False) & make_selection(df, SR2[1][0], SR2[1][1], SR2[1][2], apply=False))]
+     
+    # 3. apply selections
+    for sel in abcd['selections']: 
+        df = make_selection(df, sel[0], sel[1], sel[2], apply=True)
+    
+    # auto fill all histograms in the output dictionary
+    auto_fill(df, output, abcd, label_out, isMC=isMC, do_abcd=True)
+           
+    return output
+        
+#############################################################################################################
+
+# get list of files
+username = getpass.getuser()
+if options.file:
+    files = [options.file]
+elif options.xrootd:
+    dataDir = dataDirXRootD
+    if options.merged: dataDir += "merged/"
+    result = subprocess.check_output(["xrdfs",redirector,"ls",dataDir])
+    result = result.decode("utf-8")
+    files = result.split("\n")
+    files = [f for f in files if len(f) > 0]
+else:
+    dataDir = dataDirLocal
+    if options.merged: dataDir += "merged/"
+    files = [dataDir + f for f in os.listdir(dataDir)]
+    
+# get cross section
+xsection = 1.0
+if options.isMC: xsection = getXSection(options.dataset, options.era, SUEP=False)
+
+# event weights
+puweights, puweights_up, puweights_down = pileup_weight.pileup_weight(options.era)   
+trig_bins, trig_weights, trig_weights_up, trig_weights_down = triggerSF.triggerSF(options.era)
+
+# custom per region weights
+scaling_weights = None
+if options.weights != "None":
+    w = np.load(options.weights, allow_pickle=True)
+    scaling_weights = defaultdict(lambda: np.zeros(2))
+    scaling_weights.update(w.item())
+
 # fill ABCD hists with dfs from hdf5 files
 nfailed = 0
-weight = 0
-fpickle =  open(outDir + options.dataset+ "_" + output_label + '.pkl', "wb")
+total_gensumweight = 0
+
+if options.dataset: outFile = outDir + "/" + options.dataset+ "_" + options.output
+else: outFile = os.path.join(outDir,options.output)
 output = {"labels":[]}
 
 # systematics
-if options.isMC:
+if options.isMC and options.doSyst:
     
     new_config = {}
-    
+        
     # track systematics
-    # we need to use the trackDOWN version of the data,
+    # we need to use the track_down version of the data,
     # which has the randomly deleted tracks (see SUEPCoffea.py)
-    # so we need to modify the config to use the _trackDOWN vars
+    # so we need to modify the config to use the _track_down vars
     for label_out, config_out in config.items():
-        label_out_new = label_out+"_trackDOWN"
+        label_out_new = label_out+"_track_down"
         new_config[label_out_new] = deepcopy(config[label_out])
-        new_config[label_out_new]['input_method'] += "_trackDOWN"
-        new_config[label_out_new]['xvar'] += "_trackDOWN"
-        new_config[label_out_new]['yvar'] += "_trackDOWN"
+        new_config[label_out_new]['input_method'] += "_track_down"
+        new_config[label_out_new]['xvar'] += "_track_down"
+        new_config[label_out_new]['yvar'] += "_track_down"
         for iSel in range(len(new_config[label_out_new]['SR'])):
-            new_config[label_out_new]['SR'][iSel][0] += "_trackDOWN"
+            new_config[label_out_new]['SR'][iSel][0] += "_track_down"
         for iSel in range(len(new_config[label_out_new]['selections'])):
             if new_config[label_out_new]['selections'][iSel][0] in ['ht', 'ngood_ak4jets']: continue
-            new_config[label_out_new]['selections'][iSel][0] += "_trackDOWN"
+            new_config[label_out_new]['selections'][iSel][0] += "_track_down"
     
     
     # jet systematics
     # here, we just change ht to ht_SYS (e.g. ht -> ht_JEC_JES_up)
-    for sys in ['JEC', 'JEC_JER_up', 'JEC_JER_down', 'JEC_JES_up', 'JEC_JES_down']: 
+    jet_corrections = ['JEC', 'JEC_JER_up', 'JEC_JER_down', 'JEC_JES_up', 'JEC_JES_down']
+    for sys in jet_corrections: 
         for label_out, config_out in config.items():
             label_out_new = label_out+"_"+sys
             new_config[label_out_new] = deepcopy(config[label_out])
@@ -361,7 +498,7 @@ for ifile in tqdm(files):
         continue
             
     # update the gensumweight
-    if options.isMC and metadata != 0: weight += metadata['gensumweight']
+    if options.isMC and metadata != 0: total_gensumweight += metadata['gensumweight']
 
     # check if file is empty
     if 'empty' in list(df.keys()): continue
@@ -376,8 +513,11 @@ for ifile in tqdm(files):
     # ---- Make plots
     #####################################################################################
     event_weight = np.ones(df.shape[0])
- #   sys_loop = ["","puweights_up","puweights_down","trigSF_up","trigSF_down","PSWeight_ISR_up","PSWeight_ISR_down","PSWeight_FSR_up","PSWeight_FSR_down"]
-    sys_loop = ["","puweights_up","puweights_down","PSWeight_ISR_up","PSWeight_ISR_down","PSWeight_FSR_up","PSWeight_FSR_down"]
+    if options.doSyst:
+        sys_loop = ["", "puweights_up", "puweights_down", "trigSF_up", "trigSF_down", 
+                    "PSWeight_ISR_up", "PSWeight_ISR_down", "PSWeight_FSR_up", "PSWeight_FSR_down"]
+    else:
+        sys_loop = [""]
     for sys in sys_loop:
         # prepare new event weight
         df['event_weight'] = event_weight
@@ -394,19 +534,6 @@ for ifile in tqdm(files):
             df['event_weight'] *= pu
 
         # 2) TriggerSF weights
-        '''
-        if options.isMC == 1 and options.scouting != 1:
-            ht = np.array(df['ht']).astype(int)
-            ht_bin = np.digitize(ht,trig_bins)-1 #digitize the values to bins
-            ht_bin = np.clip(ht_bin,0,49)        #Set overlflow to last SF
-            if "trigSF_up" in sys:
-                 trigSF = trig_weights_up[ht_bin]
-            elif "trigSF_down" in sys:
-                 trigSF = trig_weights_down[ht_bin]
-            else:
-                 trigSF = trig_weights[ht_bin]
-            df['event_weight'] *= trigSF   
-        '''
         # 3) PS weights
         if options.isMC == 1 and options.scouting != 1 and ("PSWeight" in sys):
             if sys in df.keys():
@@ -424,9 +551,11 @@ for ifile in tqdm(files):
                 z_var = 'ht')
 
         for label_out, config_out in config.items():
-            if 'trackDOWN' in label_out and sys != "": continue
+            if 'track_down' in label_out and sys != "": continue
+            if options.isMC and sys != "":
+                if any([j in label_out for j in jet_corrections]): continue
             output.update(create_output_file(label_out, config_out, sys))
-            output = plot(df.copy(), output, config_out, label_out, sys)
+            output = plotter(df.copy(), output, config_out, label_out, sys, isMC=options.isMC, blind=options.blind)
         
     #####################################################################################
     # ---- End
@@ -435,9 +564,11 @@ for ifile in tqdm(files):
     # remove file at the end of loop   
     if options.xrootd: os.system('rm ' + options.dataset+'.hdf5')    
 
+print("Number of files that failed to be read:", nfailed)
 ### End plotting loop ###################################################################
 
 # do the tracks UP systematic
+<<<<<<< HEAD
 sys = 'trackUP'
 for label_out, config_out in config.items():
     if 'trackDOWN' in label_out: continue
@@ -451,19 +582,34 @@ for label_out, config_out in config.items():
         new_output.update({hist_name.replace('_trackDOWN','_trackUP'): hUp})
     #output = new_output | output
     output = dict(list(new_output.items())+list(output.items()))    
+=======
+if options.doSyst:
+    sys = 'track_up'
+    for label_out, config_out in config.items():
+        if 'track_down' in label_out: continue
+
+        new_output = {}
+        for hist_name in output.keys():
+            if not hist_name.endswith('_track_down'): continue
+            hDown = output[hist_name].copy()
+            hNom = output[hist_name.replace('_track_down','')].copy()
+            hUp = get_tracks_up(hNom, hDown)
+            new_output.update({hist_name.replace('_track_down','_track_up'): hUp})
+        output = new_output | output
+        
+>>>>>>> 43a880961c33f4bd4b0546a9c14f5b891e4e92d3
 # apply normalization
 output.pop("labels")
 if options.isMC:
-    if weight > 0.0:
-        for plot in list(output.keys()): output[plot] = output[plot]*xsection/weight
+    if total_gensumweight > 0.0:
+        for plot in list(output.keys()): output[plot] = output[plot]*xsection/total_gensumweight
     else:
-        print("Weight is 0")
+        print("Total gensumweight is 0")
         
 #Save to pickle
-pickle.dump(output, fpickle)
-print("Number of files that failed to be read:", nfailed)
+pickle.dump(output, open(outFile + '.pkl', "wb"))
 
 # save to root
-with uproot.recreate(outDir + options.dataset+ "_" + output_label + '.root') as froot:
+with uproot.recreate(outFile + '.root') as froot:
     for h, hist in output.items():
         froot[h] = hist

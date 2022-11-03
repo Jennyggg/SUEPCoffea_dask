@@ -48,9 +48,11 @@ lumis = {
     '2017': 41.5*1000,
     '2018': 61000
 }
-
+    
 # load file(s)
-def loader(infile_names, apply_lumis=True, exclude_low_bins=False):
+def loader(infile_names, 
+           apply_lumis=True,
+           exclude_low_bins=False):
     plots = {}
     for infile_name in infile_names:
         if not os.path.isfile(infile_name): 
@@ -74,7 +76,9 @@ def loader(infile_names, apply_lumis=True, exclude_low_bins=False):
                 lumi = lumis['2018']
             if 'JetHT+Run' in infile_name:
                 lumi = 1
-
+        
+        print(infile_name, lumi)
+        
         # exclude low bins
         if exclude_low_bins:
             if '50to100' in infile_name: continue
@@ -210,17 +214,26 @@ def check_proxy(time_min=100):
         
     return lifetime
 
-def getXSection(dataset, year):
+def getXSection(dataset, year, SUEP=False):
     xsection = 1
-    with open('../data/xsections_{}.json'.format(year)) as file:
-        MC_xsecs = json.load(file)
-        try:
-            xsection *= MC_xsecs[dataset]["xsec"]
-            xsection *= MC_xsecs[dataset]["kr"]
-            xsection *= MC_xsecs[dataset]["br"]
-        except:
-            print("WARNING: I did not find the xsection for that MC sample. Check the dataset name and the relevant yaml file")
-            return 1
+    if not SUEP:
+        with open('../data/xsections_{}.json'.format(year)) as file:
+            MC_xsecs = json.load(file)
+            try:
+                xsection *= MC_xsecs[dataset]["xsec"]
+                xsection *= MC_xsecs[dataset]["kr"]
+                xsection *= MC_xsecs[dataset]["br"]
+            except:
+                print("WARNING: I did not find the xsection for that MC sample. Check the dataset name and the relevant yaml file")
+                return 1
+    else:
+        with open('../data/xsections_{}_SUEP.json'.format(year)) as file:
+            MC_xsecs = json.load(file)
+            try:
+                xsection *= MC_xsecs[dataset]
+            except:
+                print("WARNING: I did not find the xsection for that MC sample. Check the dataset name and the relevant yaml file")
+                return 1
     return xsection
 
 def get_tracks_up(nom, down):
@@ -348,7 +361,9 @@ def auto_fill(df, output, abcd, label_out, isMC=False, do_abcd=False):
     for plot in plot_labels: output[plot+"_"+label_out].fill(df[plot], weight=df['event_weight']) 
     # 1b. Plot method variables
     plot_labels = [key for key in df.keys() if key.replace(input_method, label_out) in list(output.keys()) and key.endswith(input_method)]
-    for plot in plot_labels: output[plot.replace(input_method, label_out)].fill(df[plot], weight=df['event_weight'])  
+    for plot in plot_labels: 
+        if input_method not in plot: continue
+        output[plot.replace(input_method, label_out)].fill(df[plot], weight=df['event_weight'])  
     # FIXME: plot ABCD 2d
     
     # 2. fill some 2D distributions  
@@ -378,10 +393,13 @@ def auto_fill(df, output, abcd, label_out, isMC=False, do_abcd=False):
             for j in range(len(yvar_regions)-1):
                 y_val_lo = yvar_regions[j]
                 y_val_hi = yvar_regions[j+1]
-
+                
                 x_cut = (make_selection(df, xvar, '>=', x_val_lo, False) & make_selection(df, xvar, '<', x_val_hi, False))
                 y_cut = (make_selection(df, yvar, '>=', y_val_lo, False) & make_selection(df, yvar, '<', y_val_hi, False))
                 df_r = df.loc[(x_cut & y_cut)]
+
+                # double check the region is defined correctly
+                assert df_r[(df_r[xvar] > float(x_val_hi)) | (df_r[xvar] < float(x_val_lo))].shape[0] == 0
 
                 r = regions[iRegion] + "_"
                 iRegion += 1
@@ -393,10 +411,13 @@ def auto_fill(df, output, abcd, label_out, isMC=False, do_abcd=False):
 
                 # 3a. Plot event wide variables
                 plot_labels = [key for key in df_r.keys() if r+key+"_"+label_out in list(output.keys())]   # event wide variables
-                for plot in plot_labels: output[r+plot+"_"+label_out].fill(df_r[plot], weight=df_r['event_weight']) 
+                for plot in plot_labels: 
+                    output[r+plot+"_"+label_out].fill(df_r[plot], weight=df_r['event_weight']) 
                 # 3b. Plot method variables
                 plot_labels = [key for key in df_r.keys() if r+key.replace(input_method, label_out) in list(output.keys())]  # method vars
-                for plot in plot_labels: output[r+plot.replace(input_method, label_out)].fill(df_r[plot], weight=df_r['event_weight'])  
+                for plot in plot_labels: 
+                    if input_method not in plot: continue
+                    output[r+plot.replace(input_method, label_out)].fill(df_r[plot], weight=df_r['event_weight'])  
                 
 def plot1d(h, ax, label, rebin=-1, color='default', lw=1):
     
@@ -540,8 +561,8 @@ def plot_ratio_regions(plots, plot_label,
         y2, x2 = h2.to_numpy()
         x2 = x2[:-1]
                 
-        xmin1 = np.argwhere(y1>0)[0] if any(y1>0) else [1e6]
-        xmin2 = np.argwhere(y2>0)[0] if any(y2>0) else [1e6]
+        xmin1 = np.argwhere(y1>0)[0] if any(y1>0) else [len(x1)]
+        xmin2 = np.argwhere(y2>0)[0] if any(y2>0) else [len(x1)]
         xmax1 = np.argwhere(y1>0)[-1] if any(y1>0) else [0]
         xmax2 = np.argwhere(y2>0)[-1] if any(y2>0) else [0]
         xmin = min(np.concatenate((xmin1, xmin2)))
@@ -810,7 +831,7 @@ def ABCD_9regions_errorProp(abcd, xregions, yregions, sum_var='x'):
     variance = F_value**2 * sigma_alpha**2 + alpha**2 * F_variance**2
     """
     
-    A, B, C, D, E, F, G, H, SR, SR_exp = ABCD_9regions(abcd, xregions, yregions, sum_var='x', return_all=True)
+    A, B, C, D, E, F, G, H, SR, SR_exp = ABCD_9regions(abcd, xregions, yregions, sum_var=sum_var, return_all=True)
 
     # define the scaling factor function
     a, b, c, d, e, f, g, h = symbols('A B C D E F G H')
@@ -838,7 +859,8 @@ def ABCD_9regions_errorProp(abcd, xregions, yregions, sum_var='x'):
     sigma_alpha = sqrt(variance)
 
     # define SR_exp and propagate the error on the scaling factor to the bin variances
-    SR_exp = F.copy()
+    if sum_var == 'x': SR_exp = F.copy()
+    elif sum_var == 'y': SR_exp = H.copy()
     new_var = SR_exp.values()**2 * float(sigma_alpha)**2 + float(alpha)**2 * abs(SR_exp.variances())
     SR_exp.view().variance = new_var
     SR_exp.view().value = SR_exp.view().value * float(alpha)
