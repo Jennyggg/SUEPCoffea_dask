@@ -76,9 +76,7 @@ def loader(infile_names,
                 lumi = lumis['2018']
             if 'JetHT+Run' in infile_name:
                 lumi = 1
-        
-        print(infile_name, lumi)
-        
+                
         # exclude low bins
         if exclude_low_bins:
             if '50to100' in infile_name: continue
@@ -254,6 +252,28 @@ def get_tracks_up(nom, down):
         h[:,:] = np.stack([new_z, np.sqrt(new_z)], axis=-1)
     return h
 
+def apply_binwise_scaling(h_in, bins, scales, dim='x'):
+    """
+    Apply scales to bins of a particular histogram.
+    """
+    h_npy = h_in.to_numpy()
+    if len(h_npy) == 2:
+        h_fragments = []
+        for iBin in range(len(bins)-1): h_fragments.append(h_in[bins[iBin]:bins[iBin+1]] * scales[iBin])
+        h = hist.Hist(hist.axis.Variable(h_npy[1]), storage=bh.storage.Weight())
+        new_z = np.concatenate([f.to_numpy()[0] for f in h_fragments])
+        h[:] = np.stack([new_z, np.sqrt(new_z)], axis=-1)
+    elif len(h_npy) == 3:
+        h_fragments = []
+        for iBin in range(len(bins)-1):
+            if dim == 'x': h_fragments.append(h_in[bins[iBin]:bins[iBin+1], :] * scales[iBin])
+            elif dim == 'y': h_fragments.append(h_in[:, bins[iBin]:bins[iBin+1]] * scales[iBin])
+        h = hist.Hist(hist.axis.Variable(h_npy[1]), hist.axis.Variable(h_npy[2]), storage=bh.storage.Weight())
+        if dim == 'x': new_z = np.concatenate([f.to_numpy()[0] for f in h_fragments])
+        if dim == 'y': new_z = np.hstack([f.to_numpy()[0] for f in h_fragments])
+        h[:,:] = np.stack([new_z, np.sqrt(new_z)], axis=-1)
+    return h
+
 def make_selection(df, variable, operator, value, apply=True):
     """
     Apply a selection on DataFrame df based on on the df column'variable'
@@ -359,10 +379,11 @@ def auto_fill(df, output, abcd, label_out, isMC=False, do_abcd=False):
     # 1a. Plot event wide variables
     plot_labels = [key for key in df.keys() if key+"_"+label_out in list(output.keys())]  
     for plot in plot_labels: output[plot+"_"+label_out].fill(df[plot], weight=df['event_weight']) 
+    
     # 1b. Plot method variables
     plot_labels = [key for key in df.keys() if key.replace(input_method, label_out) in list(output.keys()) and key.endswith(input_method)]
     for plot in plot_labels: 
-        if input_method not in plot: continue
+        if not plot.endswith(input_method): continue
         output[plot.replace(input_method, label_out)].fill(df[plot], weight=df['event_weight'])  
     # FIXME: plot ABCD 2d
     
@@ -416,10 +437,10 @@ def auto_fill(df, output, abcd, label_out, isMC=False, do_abcd=False):
                 # 3b. Plot method variables
                 plot_labels = [key for key in df_r.keys() if r+key.replace(input_method, label_out) in list(output.keys())]  # method vars
                 for plot in plot_labels: 
-                    if input_method not in plot: continue
+                    if not plot.endswith(input_method): continue
                     output[r+plot.replace(input_method, label_out)].fill(df_r[plot], weight=df_r['event_weight'])  
                 
-def plot1d(h, ax, label, rebin=-1, color='default', lw=1):
+def plot1d(h, ax, label, color='default', lw=1):
     
     if color == 'default': color = default_colors[label]
     if label == 'QCD' and lw==1: lw=3
@@ -427,14 +448,13 @@ def plot1d(h, ax, label, rebin=-1, color='default', lw=1):
     y, x = h.to_numpy()
     e = np.sqrt(h.variances())
     x = x[:-1]
-    if rebin!=-1: x, y, e = combine_bins(x, y, e, n=rebin)
     
     #ax.step(x[:-1],values, label=label, color=color, lw=lw)
     ax.errorbar(x, y, yerr=e, label=label, lw=lw, color=color, fmt="", drawstyle='steps-mid')
     ax.set_xlabel(h.axes[0].label)
     ax.set_ylabel("Events")
     
-def plot1d_stacked(hlist, ax, labels, rebin=-1, color='midnightblue', lw=1):
+def plot1d_stacked(hlist, ax, labels, color='midnightblue', lw=1):
     
     cmap = plt.cm.rainbow(np.linspace(0, 1, len(labels)))
 
@@ -443,7 +463,6 @@ def plot1d_stacked(hlist, ax, labels, rebin=-1, color='midnightblue', lw=1):
         y, x = h.to_numpy()
         e = np.sqrt(h.variances())
         x = x[:-1]
-        if rebin!=-1: x, y, e = combine_bins(x, y, e, n=rebin)
 
         if len(ylist) > 0: y = y + ylist[len(ylist)-1]
         ylist.append(y)
@@ -461,10 +480,15 @@ def plot2d(h, ax, log=False, cmap='RdYlBu'):
     ax.set_ylabel(h.axes[1].label)
     fig.colorbar(mesh)
 
+def bin_midpoints(bins):
+    midpoints = []
+    for i in range(len(bins)-1):
+        midpoints.append((bins[i]+bins[i+1])/2)
+    return np.array(midpoints)
+
 def plot_ratio(h1, h2, 
                plot_label=None, 
                label1=None, label2=None, 
-               rebin=-1, 
                xlim='default', 
                log=True):
 
@@ -474,19 +498,16 @@ def plot_ratio(h1, h2,
     ax1 = plt.subplot2grid((4,1), (0,0),rowspan=2)
 
     y1, x1 = h1.to_numpy()
-    x1 = x1[:-1]
     y1_errs = np.sqrt(h1.variances())
-    if rebin!=-1: x1, y1, y1_errs = combine_bins(x1, y1, y1_errs, n=rebin)
-    ax1.step(x1, y1, color='maroon',label=label1, where='mid')
-    ax1.errorbar(x1, y1, yerr=y1_errs, color="maroon".upper(), fmt="", drawstyle='steps-mid')
+    ax1.stairs(y1, x1, color='maroon',label=label1)
+    x1_mid = bin_midpoints(x1)
+    ax1.errorbar(x1_mid, y1, yerr=y1_errs, color="maroon".upper(), fmt="", drawstyle='default', linestyle='')
 
     y2, x2 = h2.to_numpy()
-    y2 = y2
-    x2 = x2[:-1]
     y2_errs = np.sqrt(h2.variances())
-    if rebin!=-1: x2, y2, y2_errs = combine_bins(x2, y2, y2_errs, n=rebin)
-    ax1.step(x2, y2, color='blue',label=label2, where= 'mid')
-    ax1.errorbar(x2, y2, yerr=y2_errs, color="blue".upper(), fmt="", drawstyle='steps-mid')
+    ax1.stairs(y2, x2, color='blue',label=label2)
+    x2_mid = bin_midpoints(x2)
+    ax1.errorbar(x2_mid, y2, yerr=y2_errs, color="blue".upper(), fmt="", drawstyle='default', linestyle='')
     
     #Set parameters that will be used to make the plots prettier
     if log: ax1.set_yscale("log")
@@ -498,14 +519,14 @@ def plot_ratio(h1, h2,
         xmax = xlim[1]
         ax1.set_xlim([xmin,xmax])
     else:
-        xmin1 = min(x1[y1>0]) if len(x1[y1>0]) else 0
-        xmin2 = min(x2[y2>0]) if len(x2[y2>0]) else 0
-        xmax1 = max(x1[y1>0]) if len(x1[y1>0]) else 0
-        xmax2 = max(x2[y2>0]) if len(x2[y2>0]) else 0
-        xmin = max([xmin1, xmin2])
-        xmax = max([xmax1, xmax2])
+        xmin1 = np.argmin(x1_mid[y1>0]) if len(x1_mid[y1>0]) else x1[0]
+        xmin2 = np.argmin(x2_mid[y2>0]) if len(x2_mid[y2>0]) else x2[0]
+        xmax1 = np.argmax(x1_mid[y1>0]) if len(x1_mid[y1>0]) else x1[-1]
+        xmax2 = np.argmax(x2_mid[y2>0]) if len(x2_mid[y2>0]) else x2[-1]
+        xmin = min([x1[xmin1], x2[xmin2]])
+        xmax = max([x1[xmax1+1], x2[xmax2+1]])
         x_range = xmax - xmin
-        ax1.set_xlim([xmin - x_range*0.25, xmax + x_range*0.25])
+        ax1.set_xlim([xmin, xmax])
  
     ax1.set_ylabel("Events", y=1, ha='right')
 
@@ -520,7 +541,7 @@ def plot_ratio(h1, h2,
     ratio_errs = [yerrors_up, yerrors_low]
     ratios = np.where((y2>0) & (y1>0), y2/y1, 1)
 
-    ax2.errorbar(x1, ratios, yerr=ratio_errs, color="black", fmt="", drawstyle='steps-mid')
+    ax2.errorbar(x1_mid, ratios, yerr=ratio_errs, color="black", fmt='o', linestyle='none')
     ax2.axhline(1, ls="--", color='gray')
     ax2.set_ylim(0.4,1.6)
     ax2.set_ylabel("Ratio", y=1, ha='right')
@@ -536,7 +557,6 @@ def plot_ratio(h1, h2,
 def plot_ratio_regions(plots, plot_label, 
                sample1, sample2, 
                regions,
-               rebin=-1, 
                density=False):
 
     fig = plt.figure(figsize=(20,7))
@@ -584,14 +604,12 @@ def plot_ratio_regions(plots, plot_label,
         
         y1_errs = np.sqrt(h1.variances())
         y1_errs = y1_errs[xmin:xmax+1]
-        if rebin!=-1: x1, y1, y1_errs = combine_bins(x1, y1, y1_errs, n=rebin)
         if i == 0: ax1.step(x1, y1, color='midnightblue',label=sample1, where='mid')
         else: ax1.step(x1, y1, color='midnightblue', where='mid')
         ax1.errorbar(x1, y1, yerr=y1_errs, color="maroon".upper(), fmt="", drawstyle='steps-mid')
 
         y2_errs = np.sqrt(h2.variances())
         y2_errs = y2_errs[xmin:xmax+1]
-        if rebin!=-1: x2, y2, y2_errs = combine_bins(x2, y2, y2_errs, n=rebin)
         if i == 0: ax1.step(x2, y2, color='maroon',label=sample2, where= 'mid')
         else: ax1.step(x2, y2, color='maroon', where= 'mid')
         ax1.errorbar(x2, y2, yerr=y2_errs, color="blue".upper(), fmt="", drawstyle='steps-mid')
@@ -625,7 +643,6 @@ def plot_ratio_regions(plots, plot_label,
     
 def plot_all_regions(plots, plot_label, samples, labels,
                regions='ABCDEFGH',
-               rebin=-1, 
                density=False,
                xlim='default', 
                log=True):
@@ -677,7 +694,6 @@ def plot_all_regions(plots, plot_label, samples, labels,
         for h, x, y, sample, label in zip(hists, Xs, Ys, samples, labels):
             y_errs = np.sqrt(h.variances())
             y_errs = y_errs[xmin:xmax+1]
-            if rebin!=-1: x, y, y_errs = combine_bins(x, y, y_errs, n=rebin)
             if i == 0: ax.step(x, y, color=default_colors[sample], label=label, where='mid')
             else: ax.step(x, y, color=default_colors[sample], where='mid')
      
@@ -876,72 +892,51 @@ def find_nth(string, substring, n):
         return string.find(substring)
     else:
         return string.find(substring, find_nth(string, substring, n - 1) + 1)
-    
-def combine_bins(x, y, e, n=4):
-    old_e = e
-    old_y = y
-    old_x = x
-    
-    y = []
-    x = []
-    e = []
-   
-    for j in list(range(0,len(old_y), n)):
+
+def rebin_piecewise(h_in, bins, histtype='hist'):
+    """
+    Inputs:
+        h : histogram
+        bins: list of bins as real numbers
+        histtype: one of allowed_histtypes to return
         
-        y.append(np.sum(old_y[j:j+n]))
-        x.append(np.sum(old_x[j:j+n])/n)
-        e.append(np.sqrt(np.sum(old_e[j:j+n]**2)))
+    Returns:
+        h_out: a histogram of type 'histtype', rebinned according to desired bins
+    """
+    
+    # only 1D hists supported for now
+    if len(h_in.shape) != 1:
+        raise Exception("Only 1D hists supported for now")
+    
+    # only hist and bh supported
+    allowed_histtypes = ['hist', 'bh']
+    if histtype not in allowed_histtypes:
+        raise Exception("histtype in not in allowed_histtypes")
+    
+    # check that the bins are real numbers
+    if any([x.imag != 0 for x in bins]):
+        raise Exception("Only pass real-valued bins")
+    
+    # split the histogram by the bins
+    # and for each bin, calculate total amount of events and variance
+    z_vals, z_vars = [], []
+    for iBin in range(len(bins)-1): 
+        bin_lo = bins[iBin]*1.0j
+        bin_hi = bins[iBin+1]*1.0j
+        h_fragment = h_in[bin_lo:bin_hi]
+        z_vals.append(h_fragment.sum().value)
+        z_vars.append(h_fragment.sum().variance)
         
-    return np.array(x), np.array(y), np.array(e)
+    # fill the histograms
+    if histtype == 'hist':
+        h_out = hist.Hist(hist.axis.Variable(bins), storage=hist.storage.Weight())
+        h_out[:] = np.stack([z_vals, np.sqrt(z_vars)], axis=-1)
+        
+    elif histtype == 'bh':
+        h_out = bh.Histogram(bh.axis.Variable(bins), storage=bh.storage.Weight())
+        h_out[:] = np.stack([z_vals, np.sqrt(z_vars)], axis=-1)
 
-def rebin_piecewise_constant(x1, y1, x2):
-    x1 = np.asarray(x1)
-    y1 = np.asarray(y1)
-    x2 = np.asarray(x2)
-
-    # the fractional bin locations of the new bins in the old bins
-    i_place = np.interp(x2, x1, np.arange(len(x1)))
-    cum_sum = np.r_[[0], np.cumsum(y1)]
-
-    # calculate bins where lower and upper bin edges span
-    # greater than or equal to one original bin.
-    # This is the contribution from the 'intact' bins (not including the
-    # fractional start and end parts.
-    whole_bins = np.floor(i_place[1:]) - np.ceil(i_place[:-1]) >= 1.
-    start = cum_sum[np.ceil(i_place[:-1]).astype(int)]
-    finish = cum_sum[np.floor(i_place[1:]).astype(int)]
-    y2 = np.where(whole_bins, finish - start, 0.)
-    bin_loc = np.clip(np.floor(i_place).astype(int), 0, len(y1) - 1)
-
-    # fractional contribution for bins where the new bin edges are in the same
-    # original bin.
-    same_cell = np.floor(i_place[1:]) == np.floor(i_place[:-1])
-    frac = i_place[1:] - i_place[:-1]
-    contrib = (frac * y1[bin_loc[:-1]])
-    y2 += np.where(same_cell, contrib, 0.)
-
-    # fractional contribution for bins where the left and right bin edges are in
-    # different original bins.
-    different_cell = np.floor(i_place[1:]) > np.floor(i_place[:-1])
-    frac_left = np.ceil(i_place[:-1]) - i_place[:-1]
-    contrib = (frac_left * y1[bin_loc[:-1]])
-    frac_right = i_place[1:] - np.floor(i_place[1:])
-    contrib += (frac_right * y1[bin_loc[1:]])
-    y2 += np.where(different_cell, contrib, 0.)
-
-    return y2
-
-def rebin(h, bins):
-
-    current_bins, current_edges = h.to_numpy()
-    new_freq = rebin_piecewise_constant(current_edges, h.values(), bins)
-    new_variances = rebin_piecewise_constant(current_bins, h.variances(), bins)
-    
-    h = hist.Hist(hist.axis.Variable(bins),storage=hist.storage.Weight())
-
-    h[:] = np.stack([new_freq, new_variances], axis=-1)
-    
-    return h
+    return h_out
 
 def nested_dict(n, type):
     if n == 1:
