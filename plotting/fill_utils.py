@@ -43,7 +43,9 @@ def getXSection(dataset, year, SUEP=False, path="../data/"):
         with open(f"{path}/xsections_{year}_SUEP.json") as file:
             MC_xsecs = json.load(file)
             try:
-                xsection *= MC_xsecs[dataset]
+                xsection *= MC_xsecs[dataset]["xsec"]
+                xsection *= MC_xsecs[dataset]["kr"]
+                xsection *= MC_xsecs[dataset]["br"]
             except KeyError:
                 print(
                     "WARNING: I did not find the xsection for that MC sample. Check the dataset name and the relevant yaml file"

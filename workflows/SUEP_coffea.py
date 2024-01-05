@@ -240,7 +240,7 @@ class SUEP_cluster(processor.ProcessorABC):
         return tracks, Cleaned_cands
 
     def getScoutingTracks(self, events):
-        if "2016" in self.era:
+        if "2016" in self.era and self.isMC==1:
             Cands = ak.zip(
                 {   
                     "pt": events.offlineTrack.pt,
@@ -367,7 +367,7 @@ class SUEP_cluster(processor.ProcessorABC):
         out_label=""
     ):
         # select out ak4jets
-        if self.scouting and "2016" in self.era:
+        if self.scouting  and self.isMC == 1 and "2016" in self.era:
             ak4jets = self.jet_awkward(events.OffJet)
         else:
             ak4jets = self.jet_awkward(events.Jet)
