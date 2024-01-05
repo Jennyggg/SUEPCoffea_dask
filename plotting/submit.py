@@ -37,7 +37,7 @@ slurm_script_template = """#!/bin/bash
 
 source ~/.bashrc
 export X509_USER_PROXY=/home/submit/{user}/{proxy} 
-source activate env
+source activate /work/submit/jinw65/limit
 #conda activate SUEP # Change to your own environment setup
 cd {work_dir}
 {cmd}
@@ -105,6 +105,7 @@ parser.add_argument("--merged", type=int, default=0, help="Use merged files")
 # some info about the files, highly encouraged to specify every time
 parser.add_argument("-e", "--era", type=str, help="era", required=True)
 parser.add_argument("--isMC", type=int, help="Is this MC or data", required=True)
+parser.add_argument("--isSignal", type=int, help="Is this signal sample or not",default=0)
 parser.add_argument("--scouting", type=int, default=0, help="Is this scouting or no")
 # some parameters you can toggle freely
 parser.add_argument("--doInf", type=int, default=0, help="make GNN plots")
@@ -179,7 +180,7 @@ for i, sample in enumerate(samples):
         )
 
     elif options.code == "plot":
-        cmd = "python3 make_plots.py --dataset={sample} --tag={tag} --output={output_tag} --xrootd={xrootd} --weights={weights} --isMC={isMC} --era={era} --scouting={scouting} --merged={merged} --doInf={doInf} --doABCD={doABCD} --doSyst={doSyst} --blind={blind} --predictSR={predictSR} --save={save}".format(
+        cmd = "python3 make_plots.py --dataset={sample} --tag={tag} --output={output_tag} --xrootd={xrootd} --weights={weights} --isMC={isMC} --era={era} --scouting={scouting} --merged={merged} --doInf={doInf} --doABCD={doABCD} --doSyst={doSyst} --blind={blind} --predictSR={predictSR} --save={save} --isSignal={isSignal}".format(
             sample=sample,
             tag=options.tag,
             output_tag=options.output,
@@ -195,6 +196,7 @@ for i, sample in enumerate(samples):
             blind=options.blind,
             predictSR=options.predictSR,
             save=options.save,
+            isSignal=options.isSignal,
         )
 
     # Method to execute the code with

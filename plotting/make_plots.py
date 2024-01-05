@@ -104,8 +104,8 @@ if os.path.isdir("/data/submit/cms/store/user/" + username):
 elif os.path.isdir("/data/submit/" + username):
     # define these if --xrootd 0
     dataDirLocal = "/data/submit/{}/SUEP/{}/{}/".format(
-        getpass.getuser(), options.tag, options.dataset
-#        "akanugan", options.tag, options.dataset
+#        getpass.getuser(), options.tag, options.dataset
+        "akanugan", options.tag, options.dataset
     )
     # and these if --xrootd 1
     dataDirXRootD = "/{}/SUEP/{}/{}/".format(
@@ -450,10 +450,10 @@ def create_output_file(label, abcd, options):
     output.update(
         {
             f"ht_{label}": Hist.new.Reg(
-                700, 0, 7000, name=f"ht_{label}", label="HT"
+                50, 50, 3500, name=f"ht_{label}", label="HT"
             ).Weight(),
             f"ht_JEC_{label}": Hist.new.Reg(
-                700, 0, 7000, name=f"ht_JEC_{label}", label="HT JEC"
+                50, 50, 3500, name=f"ht_JEC_{label}", label="HT JEC"
             ).Weight(),
             f"ht_JEC_JER_up_{label}": Hist.new.Reg(
                 200,

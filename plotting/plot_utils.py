@@ -17,6 +17,15 @@ import uproot
 from sympy import diff, sqrt, symbols
 
 default_colors = {
+    "50to100": "cyan",
+    "100to200": "teal",
+    "200to300": "mediumturquoise",
+    "300to500": "lightskyblue",
+    "500to700": "steelblue",
+    "700to1000": "dodgerblue",
+    "1000to1500": "violet",
+    "1500to2000": "hotpink",
+    "2000toInf": "orange",
     "125": "cyan",
     "200": "blue",
     "300": "lightseagreen",
@@ -52,6 +61,10 @@ def getColor(sample):
     if "MC" in sample:
         return default_colors["MC"]
 
+    if "to" in sample:
+        for key in default_colors.keys():
+            if key in sample:
+                return default_colors[key]
     else:
         return None
 
@@ -81,6 +94,8 @@ def lumiLabel(year,scouting=False):
       lumidir = lumis
     if year in ["2017", "2018"]:
         return round(lumidir[year] / 1000, 1)
+    elif year == "2016apv":
+        return round(lumidir["2016_apv"] / 1000, 1)
     elif year == "2016":
         return round((lumidir[year] + lumidir[year + "_apv"]) / 1000, 1)
     elif year == "all":
@@ -93,11 +108,11 @@ def findLumi(year, auto_lumi, infile_name, scouting):
     else:
         lumidir = lumis
     if auto_lumi:
-        if "20UL16MiniAODv2" in infile_name:
+        if "20UL16" in infile_name and "preVFP" not in infile_name:
             lumi = lumidir["2016"]
-        elif "20UL17MiniAODv2" in infile_name:
+        elif "20UL17" in infile_name:
             lumi = lumidir["2017"]
-        elif "20UL16MiniAODAPVv2" in infile_name:
+        elif "20UL16" in infile_name and "preVFP" in infile_name:
             lumi = lumidir["2016_apv"]
         elif "20UL18" in infile_name:
             lumi = lumidir["2018"]

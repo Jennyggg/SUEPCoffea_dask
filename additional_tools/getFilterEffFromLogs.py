@@ -69,10 +69,11 @@ def process_files(directory):
     return sample_data
 
 
-def average_efficiency_by_ms(sample_data):
+def average_efficiency_by_ms(sample_data,selection=""):
     averaged_efficiency_by_ms = {}
 
     for sample_name, (num, denom, efficiency, efficiency_error) in sample_data.items():
+        if selection not in sample_name: continue
         ms_value = re.search(r"mS(\d+\.\d+)", sample_name)
         if ms_value:
             ms_value = float(ms_value.group(1))
@@ -95,6 +96,7 @@ def average_efficiency_by_ms(sample_data):
 if __name__ == "__main__":
     directory_path = "/work/submit/freerc/suep/official_private/2016/logs/"
     process = True
+    selection = "HT400"
 
     # either process the files or load with json
     if process:
@@ -104,7 +106,7 @@ if __name__ == "__main__":
             sample_data = json.load(json_file)
 
     # Calculate the average efficiency by mS value
-    averaged_efficiency_by_ms = average_efficiency_by_ms(sample_data)
+    averaged_efficiency_by_ms = average_efficiency_by_ms(sample_data,selection=selection)
 
     if process:
         # save the sample_data to json
@@ -117,12 +119,13 @@ if __name__ == "__main__":
 
     # read in 'kr' values from data/xsections_2018_SUEP.json
     # for all mS values that we have calculated the efficiency for and print them
-    with open("data/xsections_2018_SUEP.json") as json_file:
+    with open("data/xsections_SUEP.json") as json_file:
         xsections = json.load(json_file)
 
     truth_values = {}
     for sample_name in xsections.keys():
         # get mS from sample_name
+        #if selection not in sample_name: continue
         ms = re.search(r"mS(\d+\.\d+)", sample_name)
         if ms is None:
             continue
