@@ -179,6 +179,29 @@ class SUEP_cluster(processor.ProcessorABC):
                 & (events.Flag.eeBadScFilter)
             )
         return events[cutAnyFilter]
+    def selectByL1(self,events):
+        cutSingleJet = ak.sum(events.Jet.pt>200,axis=1) > 0
+        if self.era == "2018" and self.scouting:
+            cutDoubleJet = (ak.sum((events.Jet.pt>50)&(events.Jet.eta<2.5)&(events.Jet.eta>-2.5),axis=1) > 1)
+            events_jet = ak.mask(events,cutDoubleJet)
+            cutDoubleJetKin = ( (abs(events_jet.Jet.eta[:,0]-events_jet.Jet.eta[:,1])<1.5)
+                    & (np.sqrt((np.sqrt(events_jet.Jet.mass[:,0]**2 + (np.cosh(events_jet.Jet.eta[:,0])*events_jet.Jet.pt[:,0])**2)
+                        + np.sqrt(events_jet.Jet.mass[:,1]**2 + (np.cosh(events_jet.Jet.eta[:,1])*events_jet.Jet.pt[:,1])**2))**2
+                        - (np.sin(events_jet.Jet.phi[:,0])*events_jet.Jet.pt[:,0]
+                            +np.sin(events_jet.Jet.phi[:,1])*events_jet.Jet.pt[:,1])**2
+                        - (np.cos(events_jet.Jet.phi[:,0])*events_jet.Jet.pt[:,0]
+                            +np.cos(events_jet.Jet.phi[:,1])*events_jet.Jet.pt[:,1])**2
+                        - (np.sinh(events_jet.Jet.eta[:,0])*events_jet.Jet.pt[:,0]
+                            +np.sinh(events_jet.Jet.eta[:,1])*events_jet.Jet.pt[:,1])**2)>350)
+                    )
+            cutDoubleJetKin = ak.fill_none(cutDoubleJetKin,False)
+            cutDoubleJetKin = ak.values_astype(cutDoubleJetKin,np.int32)
+        else:
+            cutSingleJet = ak.ones_like(cutSingleJet)
+            cutDoubleJetKin = ak.ones_like(cutSingleJet)
+        return cutSingleJet,cutDoubleJetKin
+
+
 
     def getGenTracks(self, events):
         genParts = events.GenPart
@@ -241,37 +264,21 @@ class SUEP_cluster(processor.ProcessorABC):
         return tracks, Cleaned_cands
 
     def getScoutingTracks(self, events):
-        if "2016" in self.era:
-            Cands = ak.zip(
-                {
-                    "pt": events.offlineTrack.pt,
-                    "eta": events.offlineTrack.eta,
-                    "phi": events.offlineTrack.phi,
-                    "mass": events.offlineTrack.mass,
-                },
-                with_name="Momentum4D",
-            )
-            cut = (
-                (events.offlineTrack.pt >= 0.75)
-                & (abs(events.offlineTrack.eta) <= 2.4)
-                & (events.offlineTrack.quality == 1)
-            )
-        else:
-            Cands = ak.zip(
-                {
-                    "pt": events.PFcand.pt,
-                    "eta": events.PFcand.eta,
-                    "phi": events.PFcand.phi,
-                    "mass": events.PFcand.mass,
-                },
-                with_name="Momentum4D",
-            )
-            cut = (
-                (events.PFcand.pt >= 0.75)
-                & (abs(events.PFcand.eta) <= 2.4)
-                & (events.PFcand.vertex == 0)
-                & (events.PFcand.q != 0)
-            )
+        Cands = ak.zip(
+            {
+                  "pt": events.PFcand.pt,
+                  "eta": events.PFcand.eta,
+                  "phi": events.PFcand.phi,
+                  "mass": events.PFcand.mass,
+            },
+             with_name="Momentum4D",
+        )
+        cut = (
+            (events.PFcand.pt >= 0.75)
+            & (abs(events.PFcand.eta) <= 2.4)
+            & (events.PFcand.vertex == 0)
+            & (events.PFcand.q != 0)
+        )
         Cleaned_cands = Cands[cut]
         tracks = ak.packed(Cleaned_cands)
         return tracks, Cleaned_cands
@@ -368,10 +375,7 @@ class SUEP_cluster(processor.ProcessorABC):
         out_label="",
     ):
         # select out ak4jets
-        if self.scouting and "2016" in self.era:
-            ak4jets = self.jet_awkward(events.OffJet)
-        else:
-            ak4jets = self.jet_awkward(events.Jet)
+        ak4jets = self.jet_awkward(events.Jet)
 
         # work on JECs and systematics
         prefix = ""
@@ -399,7 +403,9 @@ class SUEP_cluster(processor.ProcessorABC):
         # save per event variables to a dataframe
         self.out_vars["event" + out_label] = events.event.to_list()
         self.out_vars["run" + out_label] = events.run
-
+        cutSingle,cutDouble = self.selectByL1(events)
+        self.out_vars["L1scoutSingle" + out_label] = cutSingle
+        self.out_vars["L1scoutDouble" + out_label] = cutDouble
         if self.scouting == 1:
             self.out_vars["lumi" + out_label] = events.lumSec
         else:
@@ -570,7 +576,8 @@ class SUEP_cluster(processor.ProcessorABC):
         else:
             tracks, Cleaned_cands = self.getTracks(events)
         looseElectrons, looseMuons = self.getLooseLeptons(events)
-        if self.isMC and do_syst and self.scouting == 1:
+        #if self.isMC and do_syst and self.scouting == 1:
+        if do_syst and self.scouting == 1:
             tracks = scout_track_killing(self, tracks)
             Cleaned_cands = scout_track_killing(self, Cleaned_cands)
 
@@ -672,7 +679,8 @@ class SUEP_cluster(processor.ProcessorABC):
             self.gensumweight = ak.sum(events.genWeight)
 
         # run the analysis with the track systematics applied
-        if self.isMC and self.do_syst:
+        #if self.isMC and self.do_syst:
+        if self.do_syst:
             self.analysis(events, do_syst=True, col_label="_track_down")
 
         # run the analysis

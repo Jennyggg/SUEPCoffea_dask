@@ -12,7 +12,6 @@ from histmaker.fill_utils import get_git_info
 from plotting.plot_utils import check_proxy
 
 script_TEMPLATE = """#!/bin/bash
-source /cvmfs/cms.cern.ch/cmsset_default.sh
 
 export X509_USER_PROXY={proxy}
 export PATH=$USER_PATH:$PATH
@@ -28,17 +27,15 @@ echo $PATH
 echo "hostname"
 hostname
 
-sleep $[ ( $RANDOM % 1000 )  + 1 ]s
-
-pip install h5py
 
 echo "----- xrdcp the input file over"
 echo "xrdcp $2 $3.root"
 xrdcp $2 $3.root
 
 echo "----- Found Proxy in: $X509_USER_PROXY"
-echo "python3 {condor_file} --jobNum=$1 --isMC={ismc} --era={era} --doInf={doInf} --doSyst={doSyst} --dataset={dataset} --infile=$3.root"
-python3 {condor_file} --jobNum=$1 --isMC={ismc} --era={era} --doInf={doInf} --doSyst={doSyst} --dataset={dataset} --infile=$3.root
+
+echo "python condor_track.py --infile=$3.root"
+python condor_track.py --infile=$3.root
 
 #echo "----- transferring output to scratch :"
 echo "xrdcp {outfile}.{file_ext} {redirector}/{outdir}/$3.{file_ext}"
@@ -58,7 +55,7 @@ echo " ------ THE END (everyone dies !) ----- "
 
 condor_TEMPLATE = """
 universe              = vanilla
-request_disk          = 5GB
+request_disk          = 2GB
 request_memory        = 5GB
 #request_cpus          = 1
 executable            = {jobdir}/script.sh
@@ -78,7 +75,7 @@ x509userproxy         = /home/submit/{user}/{proxy}
 +AccountingGroup      = "analysis.{user}"
 Requirements          = ( BOSCOCluster =!= "t3serv008.mit.edu" && BOSCOCluster =!= "ce03.cmsaf.mit.edu" && BOSCOCluster =!= "eofe8.mit.edu")
 +DESIRED_Sites        = "T2_AT_Vienna,T2_BE_IIHE,T2_BE_UCL,T2_BR_SPRACE,T2_BR_UERJ,T2_CH_CERN,T2_CH_CERN_AI,T2_CH_CERN_HLT,T2_CH_CERN_Wigner,T2_CH_CSCS,T2_CH_CSCS_HPC,T2_CN_Beijing,T2_DE_DESY,T2_DE_RWTH,T2_EE_Estonia,T2_ES_CIEMAT,T2_ES_IFCA,T2_FI_HIP,T2_FR_CCIN2P3,T2_FR_GRIF_IRFU,T2_FR_GRIF_LLR,T2_FR_IPHC,T2_GR_Ioannina,T2_HU_Budapest,T2_IN_TIFR,T2_IT_Bari,T2_IT_Legnaro,T2_IT_Pisa,T2_IT_Rome,T2_KR_KISTI,T2_MY_SIFIR,T2_MY_UPM_BIRUNI,T2_PK_NCP,T2_PL_Swierk,T2_PL_Warsaw,T2_PT_NCG_Lisbon,T2_RU_IHEP,T2_RU_INR,T2_RU_ITEP,T2_RU_JINR,T2_RU_PNPI,T2_RU_SINP,T2_TH_CUNSTDA,T2_TR_METU,T2_TW_NCHC,T2_UA_KIPT,T2_UK_London_IC,T2_UK_SGrid_Bristol,T2_UK_SGrid_RALPP,T2_US_Caltech,T2_US_Florida,T2_US_Nebraska,T2_US_Purdue,T2_US_UCSD,T2_US_Vanderbilt,T2_US_Wisconsin,T3_CH_CERN_CAF,T3_CH_CERN_DOMA,T3_CH_CERN_HelixNebula,T3_CH_CERN_HelixNebula_REHA,T3_CH_CMSAtHome,T3_CH_Volunteer,T3_US_HEPCloud,T3_US_NERSC,T3_US_OSG,T3_US_PSC,T3_US_SDSC,T3_US_MIT"
-+SingularityImage     = "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/coffeateam/coffea-dask:latest"
++SingularityImage     = "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/rootproject/root:6.28.04-arch"
 +JobFlavour           = "{queue}"
 
 queue jobid, fileid from {jobdir}/inputfiles.dat
@@ -98,23 +95,7 @@ def main():
     parser.add_argument(
         "-t", "--tag", type=str, default="IronMan", help="production tag", required=True
     )
-    parser.add_argument(
-        "-isMC", "--isMC", type=int, default=1, help="Is Monte Carlo or data."
-    )
-    parser.add_argument(
-        "-doInf", "--doInf", type=int, default=0, help="Do inference or not."
-    )
-    parser.add_argument(
-        "-doSyst", "--doSyst", type=int, default=1, help="Apply systematics."
-    )
-    parser.add_argument(
-        "-p", "--private", type=int, default=0, help="Private SUEP samples."
-    )
-    parser.add_argument(
-        "-cutflow", "--cutflow", type=int, default=0, help="Cutflow analyzer."
-    )
     parser.add_argument("-q", "--queue", type=str, default="espresso", help="")
-    parser.add_argument("-e", "--era", type=str, default="2018", help="")
     parser.add_argument(
         "-f", "--force", action="store_true", help="recreate files and jobs"
     )
@@ -125,17 +106,6 @@ def main():
         "-m", "--maxFiles", type=int, default=-1, help="maximum number of files"
     )
     parser.add_argument("--redo-proxy", action="store_true", help="redo the voms proxy")
-    parser.add_argument(
-        "--channel",
-        type=str,
-        required=True,
-        help="Channel to run.",
-        choices=["ggF", "WH"],
-    )
-    parser.add_argument("-sc", "--scout", type=int, default=0, help="Scouting data.")
-    parser.add_argument(
-        "-ML", "--ML", type=int, default=0, help="ML samples production."
-    )
     parser.add_argument(
         "-w",
         "--wait",
@@ -175,27 +145,9 @@ def main():
 
     # define which file you want to run, the output file name and extension that it produces
     # these will be transferred back to outdir/outdir_condor
-    if options.channel == "ggF":
-        if options.scout == 1:
-            condor_file = "condor_Scouting.py"
-            outfile = "out"
-            file_ext = "hdf5"
-        elif options.ML == 1:
-            condor_file = "condor_ML.py"
-            outfile = "out"
-            file_ext = "hdf5"
-        elif options.cutflow == 1:
-            condor_file = "condor_SUEP_cutflow.py"
-            outfile = "cutflow"
-            file_ext = "coffea"
-        else:
-            condor_file = "condor_SUEP_ggF.py"
-            outfile = "out"
-            file_ext = "hdf5"
-    elif options.channel == "WH":
-        condor_file = "condor_SUEP_WH.py"
-        outfile = "out"
-        file_ext = "hdf5"
+
+    outfile = "out"
+    file_ext = "root"
 
     # Making sure that the proxy is good
     lifetime = check_proxy(time_min=100)
@@ -276,19 +228,12 @@ def main():
                 tag=options.tag, sample=sample_name
             )
             os.system(f"mkdir -p {fin_outdir}")
-
             # write the executable we give to condor
             with open(os.path.join(jobs_dir, "script.sh"), "w") as scriptfile:
                 extras = ""
                 script = script_TEMPLATE.format(
                     proxy=proxy_base,
-                    ismc=options.isMC,
-                    era=options.era,
-                    doSyst=options.doSyst,
-                    doInf=options.doInf,
                     outdir=fin_outdir_condor,
-                    dataset=sample_name,
-                    condor_file=condor_file,
                     outfile=outfile,
                     file_ext=file_ext,
                     redirector=output_redirector,
@@ -296,13 +241,12 @@ def main():
                 )
                 scriptfile.write(script)
                 scriptfile.close()
-
             # write condor submission script
             with open(os.path.join(jobs_dir, "condor.sub"), "w") as condorfile:
                 condor = condor_TEMPLATE.format(
                     transfer_file=",".join(
                         [
-                            workdir + "/" + condor_file,
+                            workdir + "/condor_track.py",
                             workdir + "/workflows",
                             workdir + "/data",
                             proxy_copy,
@@ -317,23 +261,9 @@ def main():
                 condorfile.write(condor)
                 condorfile.close()
 
-            # write the git info to a file in the output directory where the ntuples will be stored
-            commit, diff = get_git_info()
-            current_datetime = datetime.datetime.now()
-            formatted_datetime = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-            with open(
-                os.path.join(fin_outdir, f"gitinfo_{formatted_datetime}.txt"), "w"
-            ) as gitinfo:
-                gitinfo.write("Commit: \n" + commit + "\n")
-                gitinfo.write("Diff: \n" + diff + "\n")
-                gitinfo.close()
-
             # don't submit if it's a dryrun
             if options.dryrun:
                 continue
-
-            if iSample == 0:
-                time.sleep(2 * 3600)
 
             # wait before submitting the next sample
             if iSample != 0 and options.wait > 0:

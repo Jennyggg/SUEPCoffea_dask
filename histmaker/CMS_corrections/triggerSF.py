@@ -38,18 +38,18 @@ def get_trigSF_weight(
 
 def get_scout_trigSF_weight(htarray, sys, era="2018"):
     if "16" in era:
-        scaleFactor = 1
+        bins, trigwgts, wgterr = np.loadtxt("../data/trigSF/scout_trigSF_2017.txt",delimiter=",")
     else:
-        bins, trigwgts, wgterr = np.loadtxt(f"../data/trigSF/scout_trigSF_{era}.txt")
-        htbin = np.digitize(htarray, bins)
-        trigwgts = np.insert(trigwgts, 0, 0)
-        wgterr = np.insert(wgterr, 0, 0)
-        scaleFactorNom = np.take(trigwgts, htbin)
-        scaleFactorErr = np.take(wgterr, htbin)
-        if "trigSF_up" in sys:
-            scaleFactor = scaleFactorNom + scaleFactorErr
-        elif "trigSF_down" in sys:
-            scaleFactor = scaleFactorNom - scaleFactorErr
-        else:
-            scaleFactor = scaleFactorNom
+        bins, trigwgts, wgterr = np.loadtxt(f"../data/trigSF/scout_trigSF_{era}.txt",delimiter=",")
+    htbin = np.digitize(htarray, bins)
+    trigwgts = np.insert(trigwgts, 0, 0)
+    wgterr = np.insert(wgterr, 0, 0)
+    scaleFactorNom = np.take(trigwgts, htbin)
+    scaleFactorErr = np.take(wgterr, htbin)
+    if "trigSF_up" in sys:
+        scaleFactor = scaleFactorNom + scaleFactorErr
+    elif "trigSF_down" in sys:
+        scaleFactor = scaleFactorNom - scaleFactorErr
+    else:
+        scaleFactor = scaleFactorNom
     return scaleFactor

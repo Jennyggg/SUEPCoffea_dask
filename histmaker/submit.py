@@ -125,16 +125,18 @@ elif general_options.code == "merge":
 options = parser.parse_args()
 
 # logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 # Found it necessary to run on a space with enough disk space
-work_dir_base = "/work/submit/{}/dummy_directory{}".format(
-    getpass.getuser(), np.random.randint(0, 10000)
-)
-os.system(f"mkdir {work_dir_base}")
-os.system(f"cp -a ../../SUEPCoffea_dask {work_dir_base}/.")
-logging.info("Working in " + work_dir_base)
-work_dir = work_dir_base + "/SUEPCoffea_dask/histmaker/"
+#work_dir_base = "/work/submit/{}/dummy_directory{}".format(
+#    getpass.getuser(), np.random.randint(0, 10000)
+#)
+#logging.info("Copying ../../SUEPCoffea_dask to " + work_dir_base)
+#os.system(f"mkdir {work_dir_base}")
+#os.system(f"cp -a ../../SUEPCoffea_dask {work_dir_base}/.")
+#logging.info("Working in " + work_dir_base)
+#work_dir = work_dir_base + "/SUEPCoffea_dask/histmaker/"
+work_dir = "/work/submit/{}/SUEPCoffea_dask/histmaker/".format(getpass.getuser())
 
 # Set up processing-specific options
 if options.method == "slurm":
@@ -146,10 +148,10 @@ if options.method == "slurm":
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
     if options.code == "plot":
-        memory = "12GB"
-        time = "02:00:00"
+        memory = "20GB"
+        time = "12:00:00"
     elif options.code == "merge":
-        memory = "16GB"
+        memory = "32GB"
         time = "12:00:00"
 elif options.method == "multithread":
     pool = Pool(
@@ -180,7 +182,7 @@ for i, sample in enumerate(samples):
     # skip if the output file already exists, unless you --force
     if options.code == "plot" and (
         os.path.isfile(
-            f"/data/submit/{getpass.getuser()}/SUEP/outputs/{sample}_{options.output}.root"
+            f"/ceph/submit/data/user/{getpass.getuser()[0]}/{getpass.getuser()}/SUEP/outputs/{sample}_{options.output}.root"
         )
         and not options.force
     ):
@@ -198,7 +200,7 @@ for i, sample in enumerate(samples):
         )
 
     elif options.code == "plot":
-        cmd = "python make_hists.py --sample={sample} --tag={tag} --redirector={redirector} --dataDirLocal={dataDirLocal} --dataDirXRootD={dataDirXRootD} --output={output_tag} --xrootd={xrootd} --weights={weights} --isMC={isMC} --era={era} --scouting={scouting} --merged={merged} --doInf={doInf} --doABCD={doABCD} --doSyst={doSyst} --blind={blind} --predictSR={predictSR} --saveDir={saveDir} --channel={channel} --maxFiles={maxFiles}".format(
+        cmd = "python make_hists.py --sample={sample} --tag={tag} --redirector={redirector} --dataDirLocal={dataDirLocal} --dataDirXRootD={dataDirXRootD} --output={output_tag} --xrootd={xrootd} --weights={weights} --isMC={isMC} --era={era} --scouting={scouting} --merged={merged} --doInf={doInf} --doABCD={doABCD} --doSyst={doSyst} --blind={blind} --saveDir={saveDir} --channel={channel} --maxFiles={maxFiles} --pkl={pkl}".format(
             sample=sample,
             tag=options.tag,
             output_tag=options.output,
@@ -212,17 +214,17 @@ for i, sample in enumerate(samples):
             doABCD=options.doABCD,
             doSyst=options.doSyst,
             blind=options.blind,
-            predictSR=options.predictSR,
             saveDir=options.saveDir,
             channel=options.channel,
             maxFiles=options.maxFiles,
             dataDirLocal=options.dataDirLocal,
             dataDirXRootD=options.dataDirXRootD,
             redirector=options.redirector,
+            pkl=options.pkl,
         )
 
     # execute the command with singularity
-    singularity_prefix = "singularity run --bind /work/,/data/ /cvmfs/unpacked.cern.ch/registry.hub.docker.com/coffeateam/coffea-dask:latest "
+    singularity_prefix = "singularity run --bind /work/,/data/,/ceph/ /cvmfs/unpacked.cern.ch/registry.hub.docker.com/coffeateam/coffea-dask:latest "
     cmd = singularity_prefix + cmd
     logging.debug(f"Command to run: {cmd}")
 
@@ -262,46 +264,44 @@ if options.method == "multithread":
             logging.info(str(err))
             logging.info(" ----------------- ")
 
-    # clean up
-    os.system(f"rm -rf {work_dir}")
 
 # if submitted slurm jobs, send one final job to clean up the dummy directory
-if options.method == "slurm" and len(job_ids) > 0:
-    cleanup_script = """#!/bin/bash
+#if options.method == "slurm" and len(job_ids) > 0:
+#    cleanup_script = """#!/bin/bash
 #SBATCH --job-name=cleanup_job
 #SBATCH --output={log_dir}cleanup_job.out
 #SBATCH --error={log_dir}cleanup_job.err
 #SBATCH --time=02:00:00
 #SBATCH --mem=100MB
-#SBATCH --partition=submit
+#SBATCH --partition=submit,submit-gpu
 
-while true; do
-    all_finished=true
-    for job_id in {job_ids}; do
-        echo "checking $job_id"
-        job_state=$(sacct -j $job_id -X -n -o state)
-        job_state=$(echo $job_state | xargs)
-        echo "job state: $job_state"
-        if [[ "$job_state" != "COMPLETED" && "$job_state" != "FAILED" ]]; then
-            all_finished=false
-            break
-        fi
-    done
-    if $all_finished; then
-        echo "All jobs finished, cleaning up"
-        echo "rm -rf {work_dir_base}"
-        rm -rf {work_dir_base}
-        break
-    fi
-    echo "Sleeping for 1 minute"
-    sleep 60
-done
-""".format(
-        log_dir=log_dir, job_ids=" ".join(job_ids), work_dir_base=work_dir_base
-    )
-
-    with open(f"{log_dir}cleanup.sh", "w") as f:
-        f.write(cleanup_script)
-
-    logging.info("Submitting cleanup job")
-    cleanup_id = submit_slurm_job(f"{log_dir}cleanup.sh")
+#while true; do
+#    all_finished=true
+#    for job_id in {job_ids}; do
+#        echo "checking $job_id"
+#        job_state=$(sacct -j $job_id -X -n -o state)
+#        job_state=$(echo $job_state | xargs)
+#        echo "job state: $job_state"
+#        if [[ "$job_state" != "COMPLETED" && "$job_state" != "FAILED" ]]; then
+#            all_finished=false
+#            break
+#        fi
+#    done
+#    if $all_finished; then
+#        echo "All jobs finished, cleaning up"
+#        echo "rm -rf {work_dir_base}"
+#        rm -rf {work_dir_base}
+#        break
+#    fi
+#    echo "Sleeping for 1 minute"
+#    sleep 60
+#done
+#""".format(
+#        log_dir=log_dir, job_ids=" ".join(job_ids), work_dir_base=work_dir_base
+#    )
+#
+#    with open(f"{log_dir}cleanup.sh", "w") as f:
+#        f.write(cleanup_script)
+#
+#    logging.info("Submitting cleanup job")
+#    cleanup_id = submit_slurm_job(f"{log_dir}cleanup.sh")

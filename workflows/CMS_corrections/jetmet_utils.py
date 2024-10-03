@@ -6,23 +6,13 @@ from coffea.lookup_tools import extractor
 
 
 def load_jets(self, events):
-    if (self.isMC == 1) and ("2016" in self.era):
-        vals_jet0 = events.OffJet
-        vals_jet0["pt_raw"] = events.OffJet.pt
-        vals_jet0["mass_raw"] = events.OffJet.mass
-        vals_jet0["pt_gen"] = ak.values_astype(
-            ak.without_parameters(ak.zeros_like(events.OffJet.pt)), np.float32
-        )
-        vals_jet0["rho"] = events.rho
-    else:
-        vals_jet0 = events.Jet
-        vals_jet0["pt_raw"] = events.Jet.pt
-        vals_jet0["mass_raw"] = events.Jet.mass
-        vals_jet0["rho"] = events.rho
-        vals_jet0["pt_gen"] = ak.values_astype(
-            ak.without_parameters(ak.zeros_like(events.Jet.pt)), np.float32
-        )
-
+    vals_jet0 = events.Jet
+    vals_jet0["pt_raw"] = events.Jet.pt
+    vals_jet0["mass_raw"] = events.Jet.mass
+    vals_jet0["rho"] = events.rho
+    vals_jet0["pt_gen"] = ak.values_astype(
+        ak.without_parameters(ak.zeros_like(events.Jet.pt)), np.float32
+    )
     return vals_jet0
 
 

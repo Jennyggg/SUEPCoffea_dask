@@ -1,1 +1,2 @@
-/store/user/paus/nanosc/E08/ScoutingPFCommissioning+Run2018A-v1+RAW
+/store/user/paus/nanosc/E06//ScoutingPFHT+Run2018A-v1+RAW
+/store/user/paus/nanosc/E06//ScoutingPFHT+Run2018D-v1+RAW

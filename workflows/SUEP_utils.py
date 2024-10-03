@@ -3,7 +3,8 @@ import fastjet
 import numpy as np
 import pandas as pd
 import vector
-
+import numba as nb
+from math import cos,sin,cosh,sinh,sqrt
 vector.register_awkward()
 
 
@@ -424,11 +425,30 @@ def rho(number, jet, tracks, deltaR, dr=0.05):
     rho_values = ak.sum(tracks[ring].pt, axis=1) / (dr * jet.pt)
     return rho_values
 
+def trackClusterSequenceArea(tracks,jetdef,areadef):
+    pseudojet_list = [fastjet.PseudoJet(float(t['pt']*cos(t['phi'])),float(t['pt']*sin(t['phi'])),float(t['pt']*sinh(t['eta'])),float(sqrt(t['mass']**2+(t['pt']*cosh(t['eta']))**2))) for t in tracks]
+    cluster = fastjet.ClusterSequenceArea(pseudojet_list, jetdef,areadef)
+    jets = cluster.inclusive_jets()
+    jetarea_array = np.array([j.area() for j in jets])
+    return jetarea_array
 
 def FastJetReclustering(tracks, r, minPt):
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, r)
     cluster = fastjet.ClusterSequence(tracks, jetdef)
-
+    #maxrap = 5.0
+    #area_spec = fastjet.GhostedAreaSpec(maxrap)
+    #areadef = fastjet.AreaDefinition(fastjet.active_area,area_spec)
+    #track_test = []
+    #for t in tracks[0]:
+    #    track_test.append(fastjet.PseudoJet(float(t.pt*cos(t.phi)),float(t.pt*sin(t.phi)),float(t.pt*sinh(t.eta)),float(sqrt(t.mass**2+(t.pt*cosh(t.eta))**2))))
+    #print(type(track_test[0]))
+    #cluster_test = fastjet.ClusterSequenceArea(track_test, jetdef,areadef)
+    #jet_test = cluster_test.inclusive_jets()
+    #for index,j in enumerate(jet_test):
+    #    print("jet ",index,", area ",j.area())
+    #vtrackClusterSequenceArea=np.vectorize(trackClusterSequenceArea,excluded=['jetdef','areadef'])
+    #vjetarea = vtrackClusterSequenceArea(np.array(ak.to_list(tracks),dtype=object),jetdef,areadef)
+    #print("test vector: ",vjetarea)
     # have to set min_pt = 0 and cut later to avoid some memory issues
     # FIXME: should try to understand this failure
     ak_inclusive_jets = cluster.inclusive_jets()
@@ -436,7 +456,13 @@ def FastJetReclustering(tracks, r, minPt):
 
     # apply minimum pT cut
     minPtCut = ak_inclusive_jets.pt > minPt
-
+    #print("type(ak_inclusive_jets)",type(ak_inclusive_jets))
+    #print("type(ak_inclusive_jets[0])",type(ak_inclusive_jets[0]))
+    #print("type(ak_inclusive_jets[0][0])",type(ak_inclusive_jets[0][0]))
+    #print("type(ak_inclusive_jets[0][0][0])",type(ak_inclusive_jets[0][0][0]))
+    #print(ak_inclusive_jets.shape)
+    #print(ak_inclusive_jets[0].area())
+    #print(ak_inclusive_jets.__dir__())
     ak_inclusive_jets = ak_inclusive_jets[minPtCut]
     ak_inclusive_cluster = ak_inclusive_cluster[minPtCut]
 
@@ -452,7 +478,7 @@ def getTopTwoJets(self, tracks, indices, ak_inclusive_jets, ak_inclusive_cluster
     # at least 2 tracks in SUEP and ISR
     singletrackCut = (ak.num(clusters_pTsorted[:, 0]) > 1) & (
         ak.num(clusters_pTsorted[:, 1]) > 1
-    )
+        )
     jets_pTsorted = jets_pTsorted[singletrackCut]
     clusters_pTsorted = clusters_pTsorted[singletrackCut]
     tracks = tracks[singletrackCut]

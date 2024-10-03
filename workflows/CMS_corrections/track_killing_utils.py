@@ -74,7 +74,8 @@ def scout_track_killing(self, tracks):
     trackbin = np.digitize(ak.flatten(tracks.pt), pt_bins) - 1
     scale = np.take(scaling, trackbin)
     probs = ak.where(
-        ak.flatten(tracks["pt"]) < 20, 0.025 * scale, 0.01 * scale
+        #ak.flatten(tracks["pt"]) < 20, 0.025 * scale, 0.01 * scale
+        ak.flatten(tracks["pt"]) < 20, 0.07 * scale, 0.028 * scale
     )  # 5% if pt < 1, otherwise 2%.
     rands = np.random.rand(len(probs)) > probs
     trk_killer = ak.Array(

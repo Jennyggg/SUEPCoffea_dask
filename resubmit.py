@@ -87,7 +87,7 @@ logging.info("Running resubmission script from " + str(os.environ["HOSTNAME"]))
 for i in range(nResubmits):
     logging.info("Resubmission " + str(i))
     logging.info("Removing all jobs...")
-    os.system("condor_rm {}".format(os.environ["USER"]))
+    #os.system("condor_rm {}".format(os.environ["USER"]))
     logging.info("Checking for corrupted files and removing them...")
 
     t_start = time.time()
